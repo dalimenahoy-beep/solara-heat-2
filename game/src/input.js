@@ -1,53 +1,69 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// input.js — keyboard state for the whole game. Held keys are read as a set
+// every simulation step; one-shot presses (pause, mute, radio, confirm) are
+// queued as flags and consumed once, so a tap between frames is never lost
+// and never fires twice.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+const HELD = new Set([
+  'KeyW', 'KeyA', 'KeyS', 'KeyD',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'ShiftLeft', 'ShiftRight', 'Space',
+]);
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const PRESS_FLAGS = {
+  KeyE: 'interact',
+  KeyF: 'punch',
+  KeyP: 'pause',
+  Escape: 'pause',
+  KeyM: 'mute',
+  KeyN: 'radio',
+  Enter: 'confirm',
+};
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+export function createInput() {
+  const down = new Set();
+  const pressed = new Set();
 
   window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
+    if (HELD.has(event.code)) {
+      down.add(event.code);
+      event.preventDefault();
+    }
+    const flag = PRESS_FLAGS[event.code];
+    if (flag && !event.repeat) pressed.add(flag);
+    if (event.code === 'Space' && !event.repeat) pressed.add('confirm');
   });
   window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
+    down.delete(event.code);
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  // Keys released while the tab is hidden never send keyup: drop everything.
+  window.addEventListener('blur', () => down.clear());
+
+  const has = (...codes) => codes.some((code) => down.has(code));
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+    /** Forward/back drive or walk axis: 1 forward, -1 back, 0 still. */
+    forward() {
+      return (has('KeyW', 'ArrowUp') ? 1 : 0) - (has('KeyS', 'ArrowDown') ? 1 : 0);
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
+    /** Steering / strafe axis: -1 left, 1 right. */
+    strafe() {
+      return (has('KeyD', 'ArrowRight') ? 1 : 0) - (has('KeyA', 'ArrowLeft') ? 1 : 0);
+    },
+    running() {
+      return has('ShiftLeft', 'ShiftRight');
+    },
+    braking() {
+      return has('Space');
+    },
+    /** True once per physical press of the named one-shot action. */
+    take(flag) {
+      if (!pressed.has(flag)) return false;
+      pressed.delete(flag);
+      return true;
+    },
+    /** Any key at all held (used to wake the audio engine on first touch). */
+    anyDown() {
+      return down.size > 0 || pressed.size > 0;
     },
   };
 }

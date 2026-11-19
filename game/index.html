@@ -3,17 +3,139 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>SOLARA HEAT — an open-world crime game</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1420; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* ---- HUD ---- */
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+  #phone {
+    position: absolute; top: 16px; left: 16px; width: 252px;
+    background: rgba(10, 18, 28, 0.82); border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 14px; padding: 12px 14px; color: #eef4f8;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+  }
+  #obj-title { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #ffc93c; font-weight: 700; }
+  #obj-text { font-size: 14.5px; line-height: 1.35; margin-top: 4px; }
+  #obj-meta { font-size: 13px; color: #9fd7ef; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  #obj-bar { display: none; height: 6px; background: rgba(255,255,255,0.18); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  #obj-fill { height: 100%; width: 0%; background: #ffc93c; transition: width 0.15s linear; }
+  #topright { position: absolute; top: 16px; right: 18px; text-align: right; color: #fff; }
+  #money { font-size: 30px; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.55); font-variant-numeric: tabular-nums; }
+  #stars { font-size: 21px; color: #ffd23c; letter-spacing: 2px; text-shadow: 0 2px 6px rgba(0,0,0,0.6); }
+  #mapwrap {
+    position: absolute; left: 16px; bottom: 16px; width: 188px; height: 188px;
+    border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,0.75);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.4); background: #274d2d;
+  }
+  #minimap { width: 188px; height: 188px; display: block; }
+  #healthwrap { position: absolute; left: 24px; bottom: 214px; width: 172px; height: 10px; background: rgba(0,0,0,0.55); border-radius: 5px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #39d353; }
+  #speed { position: absolute; right: 22px; bottom: 20px; color: #fff; font-size: 24px; font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,0.6); font-variant-numeric: tabular-nums; }
+  #prompt {
+    position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%);
+    background: rgba(10, 18, 28, 0.85); color: #fff; padding: 8px 18px; border-radius: 999px;
+    font-size: 16px; font-weight: 600; opacity: 0; transition: opacity 0.15s; white-space: nowrap;
+  }
+  #prompt b { color: #ffc93c; }
+  #toasts { position: absolute; right: 18px; top: 108px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .toast {
+    background: rgba(10, 18, 28, 0.88); color: #eef4f8; padding: 9px 14px; border-radius: 10px;
+    font-size: 14px; max-width: 300px; opacity: 0; transform: translateX(12px); transition: all 0.3s;
+    border-left: 3px solid #ffc93c;
+  }
+  .toast.show { opacity: 1; transform: none; }
+  #banner {
+    position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%) scale(0.96);
+    text-align: center; color: #fff; opacity: 0; transition: all 0.3s; pointer-events: none;
+  }
+  #banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #banner-title { font-size: 44px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; text-shadow: 0 4px 22px rgba(0,0,0,0.65); }
+  #banner-sub { font-size: 17px; color: #ffe9a8; text-shadow: 0 2px 10px rgba(0,0,0,0.7); margin-top: 4px; }
+  #arrest { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); width: 240px; display: none; text-align: center; }
+  #arrest .label { color: #6fb7ff; font-weight: 800; letter-spacing: 0.2em; font-size: 13px; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  #arrest-bar { height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  #arrest-fill { height: 100%; width: 0%; background: #6fb7ff; }
+  #hurt { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(200,0,0,0.45) 100%); opacity: 0; transition: opacity 0.12s; }
+
+  /* ---- overlays ---- */
+  .screen {
+    position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(8, 20, 34, 0.55), rgba(8, 14, 24, 0.82)); color: #fff; text-align: center; z-index: 5;
+  }
+  .screen h1 { font-size: 64px; margin: 0; font-weight: 900; letter-spacing: 0.04em; }
+  .screen h1 .heat { color: #ff7847; }
+  .screen .tag { font-size: 18px; color: #cfe8f5; margin: 8px 0 22px; }
+  .screen button {
+    pointer-events: auto; cursor: pointer; border: 0; border-radius: 999px; padding: 13px 34px;
+    font-size: 17px; font-weight: 800; background: #ffc93c; color: #1c2733; margin: 5px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  }
+  .screen button.secondary { background: rgba(255,255,255,0.16); color: #fff; }
+  .screen button:hover { filter: brightness(1.08); }
+  .controls { margin-top: 26px; font-size: 14px; color: #a9c6d8; line-height: 1.75; }
+  .controls b { color: #fff; background: rgba(255,255,255,0.14); border-radius: 5px; padding: 1px 7px; font-weight: 700; }
+  #save-info { color: #ffd166; font-size: 14px; min-height: 18px; }
+  #end-title { font-size: 72px; font-weight: 900; letter-spacing: 0.08em; margin: 0; }
+  #end-text { font-size: 18px; color: #e6eef4; margin: 10px 0 22px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="SOLARA HEAT: an open-world crime game in the city of Solara Bay"></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="phone">
+    <div id="obj-title">Solara Heat</div>
+    <div id="obj-text">Welcome to Solara Bay.</div>
+    <div id="obj-meta"></div>
+    <div id="obj-bar"><div id="obj-fill"></div></div>
+  </div>
+  <div id="topright">
+    <div id="money">$0</div>
+    <div id="stars">☆☆☆☆☆</div>
+  </div>
+  <div id="toasts"></div>
+  <div id="mapwrap"><canvas id="minimap" width="376" height="376"></canvas></div>
+  <div id="healthwrap"><div id="health-fill"></div></div>
+  <div id="speed"></div>
+  <div id="prompt"></div>
+  <div id="arrest"><div class="label">ARRESTING</div><div id="arrest-bar"><div id="arrest-fill"></div></div></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+</div>
+<div id="hurt"></div>
+
+<div id="title-screen" class="screen">
+  <h1>SOLARA <span class="heat">HEAT</span></h1>
+  <p class="tag">An open-world crime game in the city of Solara Bay.<br>Steal cars. Run jobs. Outrun the SBPD.</p>
+  <div>
+    <button id="btn-play">New Game</button>
+    <button id="btn-continue" class="secondary" style="display:none">Continue</button>
+  </div>
+  <p id="save-info"></p>
+  <div class="controls">
+    <b>W A S D</b> move / drive &nbsp; <b>Shift</b> run &nbsp; <b>E</b> enter / exit car &nbsp; <b>F</b> punch<br>
+    <b>Space</b> handbrake &nbsp; <b>P</b> pause &nbsp; <b>N</b> radio &nbsp; <b>M</b> mute &nbsp; Mouse drag orbits the camera
+  </div>
+</div>
+
+<div id="pause-screen" class="screen">
+  <h1>Paused</h1>
+  <p class="tag">The bay waits for no one. Well — just this once.</p>
+  <button id="btn-resume">Resume</button>
+</div>
+
+<div id="end-screen" class="screen">
+  <h2 id="end-title">BUSTED</h2>
+  <p id="end-text"></p>
+  <button id="btn-again">Back to the Bay</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.min.js" } }
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
